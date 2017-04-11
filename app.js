@@ -7,14 +7,14 @@ const WebSocketServer = require('ws').Server
 let wordArr = ['Monkey', 'Dog', 'Bear', 'Flower', 'Girl'];
 let roomList = [{
     roomId:'',
-    roomName:''
+    roomName:'',
+    user:''
 }];
 let userList = new Map();
-
+let rommUser = [];
 wss.on('connection', (ws) => {
     console.log('connected.')
     ws.id = '000001';
-    console.log(ws.upgradeReq);
     let rspJson = {
             respCode:'0000',
             respDesc:'请求成功',
@@ -22,16 +22,17 @@ wss.on('connection', (ws) => {
             resultData:{}
         };
     let keyWord;
+    let rommIndex;
     wss.clients.forEach((client) => {
-        // if (client == ws) {
-            // console.log(client);
+        if (client == ws) {
+            rspJson.respAction = 'Connected';
             rspJson.respDesc = '加入成功！'
             client.send(JSON.stringify(rspJson));
-        // }
+        }
     });
+
     // 当服务器接收到客户端传来的消息时
-    // 判断消息内容与关键词是否相等
-    // 同时向所有客户端派发消息
+    // 通过reqAction做出不同事件响应
     ws.on('message', (message) => {
         console.log('received: %s', message);
         let data = JSON.parse(message);
@@ -46,7 +47,6 @@ wss.on('connection', (ws) => {
             case 'Login':
                 let userInfo;
                 let userId = data.reqData.userId;
-                rspJson.respAction = 'Login';
                 if(userList.has(userId)){
                     //该用户已存在
                     userInfo = userList.get(userId);
@@ -59,6 +59,14 @@ wss.on('connection', (ws) => {
                         userRoomInfo:''
                     }
                     userList.set(userId,userInfo);
+                    wss.clients.forEach((client) => {
+                        if (client == ws) {
+                            rspJson.respAction = 'Login';
+                            rspJson.respDesc = '登录成功！';
+                            rspJson.resultData = userInfo;
+                            client.send(JSON.stringify(rspJson));
+                        }
+                    });
                 }
                 ws.userInfo = userInfo;
                 break;
@@ -82,20 +90,68 @@ wss.on('connection', (ws) => {
                         }
                     });
                 }else{
+                    let roomId = roomList[roomList.length-1].roomId++;
                     //房间可以创建
                     roomList.push({
-                        roomId:roomList.length,
-                        roomName:roomName
+                        roomId:roomId,
+                        roomName:roomName,
+                        user:[ws]
                     });
+                    roomIndex = roomList.length;
                     ws.userInfo.roomInfo = {
-                        roomId:roomList.length,
-                        roomName:roomName
+                        roomId:roomId,
+                        roomName:roomName,
+                        isOwner:true
                     }
                     //通知房间创建成功,并广播房间列表信息
                     rspJson.respCode = '0000';
                     rspJson.respDesc = '房间创建成功！';
                     rspJson.respAction = data.reqAction;
                     rspJson.resultData.roomList = roomList;
+                    wss.clients.forEach((client) => {
+                        client.send(JSON.stringify(rspJson));
+                    });
+                }
+            case 'JoinRoom':
+                rspJson.respAction = 'JoinRoom';
+                roomId = data.reqData.roomId;
+                roomName = data.reqData.roomName;
+                let roomHased = false;
+                for(var i = 0;i<roomList.length;i++){
+                    if(roomList[i].roomId == roomId){
+                        roomHased = ture;
+                        roomIndex = i;
+                    }
+                }
+                if(nameHased){
+                    //房间ID存在
+                    ws.userInfo.roomInfo = {
+                        roomId:roomId,
+                        roomName:roomName
+                    }
+                    roomList[roomIndex].user.push(ws);
+                    rspJson.respCode = '0000';
+                    rspJson.respDesc = '加入成功！';
+                    rspJson.respAction = data.reqAction;
+                    
+                    for(var i=0;i<wss.clients.length;i++){
+                        if(wss.clients[i].userInfo.roomInfo.roomId == roomId){
+                            roomUser.push(wss.clients[i]);
+                        }
+                    }
+
+                    rspJson.resultData = roomUser;
+                    //向同房间的用户广播
+                    wss.clients.forEach((client) => {
+                        if (client.userInfo.roomInfo.roomId == roomId) {
+                            client.send(JSON.stringify(rspJson));
+                        }
+                    });
+                }else{
+                    //房间不存在
+                    rspJson.respCode = '0099';
+                    rspJson.respDesc = '房间不存在！';
+                    rspJson.respAction = data.reqAction;
                     wss.clients.forEach((client) => {
                         client.send(JSON.stringify(rspJson));
                     });
@@ -132,6 +188,61 @@ wss.on('connection', (ws) => {
                     }
                 });
                 break;
+            case 'LeaveRoom':
+                rspJson.respAction = 'LeaveRoom';
+                roomId = data.reqData.roomId;
+                roomName = data.reqData.roomName;
+                roomHased = false;
+                /**
+                 * 1、判断是否是最后一个人
+                 * 2、判断是否是房主
+                 * 3、成功退出
+                 */
+                
+                if(roomList[roomIndex].user.length==1){
+                    //是最后一个人,直接删除房间，并删除个人附带信息
+                    roomList.splice(roomIndex,1);
+                    ws.userInfo.roomInfo={
+
+                    }
+                }else{
+                    //不是最后一个人
+                    ws.userInfo.roomInfo={
+
+                    }
+                    for(var i =0;i<roomList[roomIndex].user.length;i++){
+                        if(roomList[roomIndex].user[i] == ws){
+                            if(ws.userInfo.roomInfo.isOwner){//是房主
+                                roomList[roomIndex].user[i+1].userInfo.isOwner = true;
+                                for(var i=0;i<wss.clients.length;i++){
+                                    if(wss.clients[i] == roomList[roomIndex].user[i+1]){
+                                        wss.clients[i].userInfo.isOwner = true;
+                                    }
+                                }
+                            }else{//不是房主
+                                
+                            }
+                            roomList[roomIndex].user.splice(i,1);
+                        }
+                    }                   
+                }
+                rspJson.respCode = '0000';
+                rspJson.respDesc = '已离开';
+                rspJson.respAction = data.reqAction;
+                
+                // for(var i=0;i<wss.clients.length;i++){
+                //     if(wss.clients[i].userInfo.roomInfo.roomId == roomId){
+                //         roomUser.push(wss.clients[i]);
+                //     }
+                // }
+
+                rspJson.resultData = roomList[roomIndex].user;
+                //向同房间的用户广播
+                wss.clients.forEach((client) => {
+                    if (client.userInfo.roomInfo.roomId == roomId) {
+                        client.send(JSON.stringify(rspJson));
+                    }
+                });
             default:
                 rspJson.respCode = '0001';
                 rspJson.respDesc = '接口不存在！';

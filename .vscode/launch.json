@@ -10,6 +10,7 @@
             "request": "launch",
             "name": "启动程序",
             "program": "${workspaceRoot}/app.js",
+            "address": "localhost",
             "outFiles": []
         },
         {
