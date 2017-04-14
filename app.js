@@ -14,7 +14,7 @@ let wordArr = ['Monkey', 'Dog', 'Bear', 'Flower', 'Girl'];
 // }];
 let roomList = [];
 let userList = new Map();
-let rommUser = [];
+let roomUser = [];
 wss.on('connection', (ws) => {
     console.log('connected.')
     ws.id = '000001';
@@ -82,7 +82,7 @@ wss.on('connection', (ws) => {
                 break;
             case 'CreateRoom': //新建房间
                 rspJson.respAction = 'CreateRoom';
-                let roomName = data.reqData.roomName;
+                var roomName = data.reqData.roomName;
                 let nameHased = false;
                 for(var i = 0;i<roomList.length;i++){
                     if(roomList[i].roomName == roomName){
@@ -128,6 +128,7 @@ wss.on('connection', (ws) => {
                     rspJson.resultData.roomList = roomList;
                     rspJson.resultData.ownerInfo = ws.userInfo;
                     wss.clients.forEach((client) => {
+                        console.log('send: %s', JSON.stringify(rspJson));
                         client.send(JSON.stringify(rspJson));
                     });
                 }
@@ -135,33 +136,38 @@ wss.on('connection', (ws) => {
             case 'JoinRoom':
                 rspJson.respAction = 'JoinRoom';
                 let roomId = data.reqData.roomId;
-                roomName = data.reqData.roomName;
+                var roomName = data.reqData.roomName;
                 let roomHased = false;
                 for(var i = 0;i<roomList.length;i++){
                     if(roomList[i].roomId == roomId){
-                        roomHased = ture;
+                        roomHased = true;
                         roomIndex = i;
                     }
                 }
-                if(nameHased){
+                if(roomHased){
                     //房间ID存在
                     ws.userInfo.roomInfo = {
                         roomId:roomId,
-                        roomName:roomName
+                        roomName:roomName,
+                        isOwner:false
                     }
-                    roomList[roomIndex].user.push(ws);
+                    roomList[roomIndex].user.push(ws.userInfo);
                     rspJson.respCode = '0000';
-                    rspJson.respDesc = '加入成功！';
+                    rspJson.respDesc = '加入房间成功';
                     rspJson.respAction = data.reqAction;
-                    
-                    for(var i=0;i<wss.clients.length;i++){
-                        if(wss.clients[i].userInfo.roomInfo.roomId == roomId){
-                            roomUser.push(wss.clients[i].userInfo);
-                        }
-                    }
-
-                    rspJson.resultData = roomUser;
+                    rspJson.resultData.userList = roomList[roomIndex].user;
                     //向同房间的用户广播
+                    wss.clients.forEach((client) => {
+                        if (client.userInfo.roomInfo.roomId == roomId) {
+                            client.send(JSON.stringify(rspJson));
+                        }
+                    });
+
+                    //向房间内成员广播新用户列表
+                    rspJson.respCode = '0000';
+                    rspJson.respDesc = '获取房间信息成功';
+                    rspJson.respAction = "GetRoomInfo";
+                    rspJson.resultData.userList = roomList[roomIndex].user;
                     wss.clients.forEach((client) => {
                         if (client.userInfo.roomInfo.roomId == roomId) {
                             client.send(JSON.stringify(rspJson));
@@ -177,6 +183,51 @@ wss.on('connection', (ws) => {
                     });
                 }
                 break;
+            case 'GetRoomInfo':
+                rspJson.respAction = 'GetRoomInfo';
+                var roomName = data.reqData.roomName;
+                for(var i = 0;i<roomList.length;i++){
+                    if(roomList[i].roomName == roomName){
+                        roomIndex = i;
+                    }
+                }
+                //房间存在
+                rspJson.respCode = '0000';
+                rspJson.respDesc = '获取房间信息成功';
+                rspJson.respAction = data.reqAction;
+                rspJson.resultData.userList = roomList[roomIndex].user;
+                wss.clients.forEach((client) => {
+                    if (client == ws) {
+                        client.send(JSON.stringify(rspJson));
+                    }
+                });
+                break;
+            case 'Chat':
+                rspJson.respAction = 'Chat';
+                var roomName = data.reqData.roomInfo.roomName;
+                var messageText = data.reqData.message;
+                for(var i = 0;i<roomList.length;i++){
+                    if(roomList[i].roomName == roomName){
+                        roomIndex = i;
+                    }
+                }
+                //房间存在
+                rspJson.respCode = '0000';
+                rspJson.respDesc = '成功';
+                rspJson.respAction = data.reqAction;
+                var rspdata = {
+                    name:ws.userInfo.userName,
+                    iconUrl:ws.userInfo.userIcon,
+                    message:messageText,
+                    isMe:false
+                };
+                rspJson.resultData = rspdata;
+                wss.clients.forEach((client) => {
+                    if (client.userInfo.roomInfo.roomName == roomName && client != ws) {
+                        client.send(JSON.stringify(rspJson));
+                    }
+                });
+                break;
             case 'Start':
                 rspJson.respAction = 'Start';
                 // 开始时随机获取一个关键词
@@ -184,28 +235,55 @@ wss.on('connection', (ws) => {
                     let num = Math.floor(Math.random()*arr.length);
                     return arr[num]
                 })(wordArr);
+
                 rspJson.respAction = 'Start';
+                var roomName = data.reqData.roomInfo.roomName;
                 rspJson.resultData.keyWord = keyWord;
-                // 开始时即向客户端提供一个关键词
+
+                //房间存在
+                rspJson.respCode = '0000';
+                rspJson.respDesc = '成功';
+                rspJson.respAction = data.reqAction;
+                rspJson.resultData.keyWord = keyWord;
                 wss.clients.forEach((client) => {
-                    client.send(JSON.stringify(rspJson));
+                    if (client.userInfo.roomInfo.roomName == roomName) {
+                        client.send(JSON.stringify(rspJson));
+                    }
                 });
                 break;
             case 'Answer':
+                rspJson.respAction = 'Answer';
+                var roomName = data.reqData.roomInfo.roomName;
                 let result;
                 data.reqData.answer == keyWord ? result = true: result = false;
                 console.log('答案:'+result);
-                rspJson.respAction = 'Answer';
+
+                //房间存在
+                rspJson.respCode = '0000';
+                rspJson.respDesc = '回答正确';
+                rspJson.respAction = data.reqAction;
                 rspJson.resultData.result = result;
                 wss.clients.forEach((client) => {
-                    client.send(JSON.stringify(rspJson));
-                })
+                    if (client.userInfo.roomInfo.roomName == roomName && ws == client) {
+                        if(ws == client){
+                            client.send(JSON.stringify(rspJson));
+                        }else{
+
+                        }
+                    }
+                });
                 break;
             case 'Draw':
+                var roomName = data.reqData.roomInfo.roomName;
+
                 rspJson.respAction = 'Draw';
+                rspJson.respCode = '0000';
+                rspJson.respDesc = '成功';
+                rspJson.respAction = data.reqAction;
                 rspJson.resultData.drawData = data.reqData.drawData;
+
                 wss.clients.forEach((client) => {
-                    if (client !== ws) {
+                    if (client.userInfo.roomInfo.roomName == roomName && ws != client) {
                         client.send(JSON.stringify(rspJson));
                     }
                 });
