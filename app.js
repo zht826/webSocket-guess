@@ -15,6 +15,7 @@ let wordArr = ['Monkey', 'Dog', 'Bear', 'Flower', 'Girl'];
 let roomList = [];
 let userList = new Map();
 let roomUser = [];
+let keyWordList = new Map();
 wss.on('connection', (ws) => {
     console.log('connected.')
     ws.id = '000001';
@@ -24,7 +25,6 @@ wss.on('connection', (ws) => {
             respAction:'',
             resultData:{}
         };
-    let keyWord;
     let roomIndex;
     wss.clients.forEach((client) => {
         if (client == ws) {
@@ -86,7 +86,7 @@ wss.on('connection', (ws) => {
                 let nameHased = false;
                 for(var i = 0;i<roomList.length;i++){
                     if(roomList[i].roomName == roomName){
-                        nameHased = ture;
+                        nameHased = true;
                     }
                 }
                 if(nameHased){
@@ -231,15 +231,14 @@ wss.on('connection', (ws) => {
             case 'Start':
                 rspJson.respAction = 'Start';
                 // 开始时随机获取一个关键词
-                keyWord = ((arr) => {
+                let keyWord = ((arr) => {
                     let num = Math.floor(Math.random()*arr.length);
                     return arr[num]
                 })(wordArr);
 
                 rspJson.respAction = 'Start';
                 var roomName = data.reqData.roomInfo.roomName;
-                rspJson.resultData.keyWord = keyWord;
-
+                keyWordList.set(roomName,keyWord);
                 //房间存在
                 rspJson.respCode = '0000';
                 rspJson.respDesc = '成功';
@@ -255,12 +254,13 @@ wss.on('connection', (ws) => {
                 rspJson.respAction = 'Answer';
                 var roomName = data.reqData.roomInfo.roomName;
                 let result;
-                data.reqData.answer == keyWord ? result = true: result = false;
+
+                data.reqData.answer == keyWordList.get(roomName) ? result = true: result = false;
                 console.log('答案:'+result);
 
                 //房间存在
                 rspJson.respCode = '0000';
-                rspJson.respDesc = '回答正确';
+                rspJson.respDesc = '成功';
                 rspJson.respAction = data.reqAction;
                 rspJson.resultData.result = result;
                 wss.clients.forEach((client) => {
