@@ -229,50 +229,22 @@ wss.on('connection', (ws) => {
                 });
                 break;
             case 'Start':
-                rspJson.respAction = 'Start';
-                // 开始时随机获取一个关键词
-                let keyWord = ((arr) => {
-                    let num = Math.floor(Math.random()*arr.length);
-                    return arr[num]
-                })(wordArr);
-
-                rspJson.respAction = 'Start';
                 var roomName = data.reqData.roomInfo.roomName;
-                keyWordList.set(roomName,keyWord);
+                roomUser = [];
                 //房间存在
                 rspJson.respCode = '0000';
                 rspJson.respDesc = '成功';
                 rspJson.respAction = data.reqAction;
-                rspJson.resultData.keyWord = keyWord;
+                rspJson.resultData = {};
                 wss.clients.forEach((client) => {
                     if (client.userInfo.roomInfo.roomName == roomName) {
                         client.send(JSON.stringify(rspJson));
+                        roomUser.push(client);
                     }
                 });
+                gameRun(roomUser,roomName);
                 break;
-            case 'Answer':
-                rspJson.respAction = 'Answer';
-                var roomName = data.reqData.roomInfo.roomName;
-                let result;
-
-                data.reqData.answer == keyWordList.get(roomName) ? result = true: result = false;
-                console.log('答案:'+result);
-
-                //房间存在
-                rspJson.respCode = '0000';
-                rspJson.respDesc = '成功';
-                rspJson.respAction = data.reqAction;
-                rspJson.resultData.result = result;
-                wss.clients.forEach((client) => {
-                    if (client.userInfo.roomInfo.roomName == roomName && ws == client) {
-                        if(ws == client){
-                            client.send(JSON.stringify(rspJson));
-                        }else{
-
-                        }
-                    }
-                });
-                break;
+            
             case 'Draw':
                 var roomName = data.reqData.roomInfo.roomName;
 
@@ -290,70 +262,267 @@ wss.on('connection', (ws) => {
                 break;
             case 'LeaveRoom':
                 rspJson.respAction = 'LeaveRoom';
-                roomId = data.reqData.roomId;
-                roomName = data.reqData.roomName;
-                roomHased = false;
+                // roomId = data.reqData.roomId;
+                var roomName = data.reqData.roomInfo.roomName;
+                // var roomHased = false;
+                for(var i = 0;i<roomList.length;i++){
+                    if(roomList[i].roomName == roomName){
+                        // roomHased = true;
+                        roomIndex = i;
+                    }
+                }
                 /**
                  * 1、判断是否是最后一个人
                  * 2、判断是否是房主
                  * 3、成功退出
                  */
-                
                 if(roomList[roomIndex].user.length==1){
                     //是最后一个人,直接删除房间，并删除个人附带信息
                     roomList.splice(roomIndex,1);
-                    ws.userInfo.roomInfo={
-
-                    }
+                    ws.userInfo.roomInfo='';
                 }else{
                     //不是最后一个人
-                    ws.userInfo.roomInfo={
-
-                    }
+                    ws.userInfo.roomInfo='';
                     for(var i =0;i<roomList[roomIndex].user.length;i++){
                         if(roomList[roomIndex].user[i] == ws){
                             if(ws.userInfo.roomInfo.isOwner){//是房主
-                                roomList[roomIndex].user[i+1].userInfo.isOwner = true;
-                                for(var i=0;i<wss.clients.length;i++){
-                                    if(wss.clients[i] == roomList[roomIndex].user[i+1]){
-                                        wss.clients[i].userInfo.isOwner = true;
-                                    }
-                                }
+                                roomList[roomIndex].user[i+1].userInfo.isOwner = true;//设置下一个人是房主
                             }else{//不是房主
                                 
                             }
                             roomList[roomIndex].user.splice(i,1);
                         }
-                    }                   
+                    }
+                    rspJson.respCode = '0000';
+                    rspJson.respDesc = '已离开';
+                    rspJson.respAction = data.reqAction;
+                    rspJson.resultData = roomList[roomIndex].user;
+                    //向同房间的用户广播
+                    wss.clients.forEach((client) => {
+                        if (client.userInfo.roomInfo.roomName == roomName) {
+                            client.send(JSON.stringify(rspJson));
+                        }
+                    });
                 }
                 rspJson.respCode = '0000';
-                rspJson.respDesc = '已离开';
-                rspJson.respAction = data.reqAction;
-                
-                // for(var i=0;i<wss.clients.length;i++){
-                //     if(wss.clients[i].userInfo.roomInfo.roomId == roomId){
-                //         roomUser.push(wss.clients[i]);
-                //     }
-                // }
-
-                rspJson.resultData = roomList[roomIndex].user;
-                //向同房间的用户广播
+                rspJson.respDesc = '更新房间信息';
+                rspJson.respAction = 'RoomList';
+                rspJson.resultData = {
+                    roomList:roomList
+                };
+                //向不在房间内的人广播房间列表
                 wss.clients.forEach((client) => {
-                    if (client.userInfo.roomInfo.roomId == roomId) {
+                    if (!client.userInfo.roomInfo) {
                         client.send(JSON.stringify(rspJson));
                     }
                 });
                 break;
             default:
-                rspJson.respCode = '0001';
-                rspJson.respDesc = '接口不存在！';
+                break;
+        }
+    });
+    
+    // 退出聊天  
+    ws.on('close', function(close) {  
+        
+        // roomId = data.reqData.roomId;
+        var roomName;
+        if(ws.userInfo.roomInfo.roomName){
+            roomName = ws.userInfo.roomInfo.roomName;
+            for(var i = 0;i<roomList.length;i++){
+                if(roomList[i].roomName == roomName){
+                    roomIndex = i;
+                }
+            }
+            /**
+             * 1、判断是否是最后一个人
+             * 2、判断是否是房主
+             * 3、成功退出
+             */
+            if(roomList[roomIndex].user.length==1){
+                //是最后一个人,直接删除房间，并删除个人附带信息
+                roomList.splice(roomIndex,1);
+                ws.userInfo.roomInfo='';
+            }else{
+                //不是最后一个人
+                ws.userInfo.roomInfo='';
+                for(var i =0;i<roomList[roomIndex].user.length;i++){
+                    if(roomList[roomIndex].user[i] == ws){
+                        if(ws.userInfo.roomInfo.isOwner){//是房主
+                            roomList[roomIndex].user[i+1].userInfo.isOwner = true;//设置下一个人是房主
+                        }else{//不是房主
+                            
+                        }
+                        roomList[roomIndex].user.splice(i,1);
+                    }
+                }
+                rspJson.respCode = '0000';
+                rspJson.respDesc = '已离开';
+                rspJson.respAction = "LeaveRoom";
+                rspJson.resultData = roomList[roomIndex].user;
+                //向同房间的用户广播
                 wss.clients.forEach((client) => {
-                    if (client == ws) {
+                    if (client.userInfo.roomInfo.roomName == roomName) {
                         client.send(JSON.stringify(rspJson));
                     }
                 });
+            }
+            rspJson.respCode = '0000';
+            rspJson.respDesc = '更新房间信息';
+            rspJson.respAction = 'RoomList';
+            rspJson.resultData = roomList;
+            //向同房间的用户广播
+            wss.clients.forEach((client) => {
+                if (!client.userInfo.roomInfo) {
+                    client.send(JSON.stringify(rspJson));
+                }
+            });
         }
-    })
-    
-    
+    });
+    function gameRun(userArry, roomName){
+        let Game = {};
+        let playerList = [];
+        let playerIndex = 0;
+        let playerInfo;
+        for(var i = 0;i<userArry.length;i++){
+            playerList.push(userArry[i].userInfo);
+        }
+        let round = 1;
+        ws.on('message', (message) => {
+            console.log('received111111: %s', message);
+            let data = JSON.parse(message);
+            rspJson = {
+                respCode:'0000',
+                respDesc:'请求成功',
+                respAction:'',
+                resultData:{}
+            }
+            //根据发送的消息类型做不同处理
+            switch(data.reqAction){
+                case 'Answer':
+                    rspJson.respAction = 'Answer';
+                    var roomName = data.reqData.roomInfo.roomName;
+                    let result;
+
+                    data.reqData.answer == keyWordList.get(roomName) ? result = true: result = false;
+
+                    console.log('答案:'+result);
+
+                    rspJson.resultData= {};
+                    if(result){
+                        playerList[playerIndex].soccer++;
+                    }
+                    //房间存在
+                    rspJson.respCode = '0000';
+                    rspJson.respDesc = '成功';
+                    rspJson.respAction = data.reqAction;
+                    rspJson.resultData.result = result;
+                    wss.clients.forEach((client) => {
+                        if (client.userInfo.roomInfo.roomName == roomName && ws == client) {
+                            if(ws == client){
+                                rspJson.resultData.userInfo = playerList;
+                                client.send(JSON.stringify(rspJson));
+                            }else{
+                                client.send(JSON.stringify(rspJson));
+                            }
+                        }
+                    });
+                    break;
+                default:
+                    break;
+            }
+        })
+        Game.over = function(){
+            clearTimeout(Game.timer);
+            rspJson.respCode = '0000';
+            rspJson.respDesc = '游戏结束';
+            rspJson.respAction = 'GameOver';
+            rspJson.resultData = {
+                player:playerInfo
+            };
+            //向同房间的用户广播
+            wss.clients.forEach((client) => {
+                if (client.userInfo.roomInfo.roomName == roomName) {
+                    client.send(JSON.stringify(rspJson));
+                }
+            });
+        }
+
+        Game.nextRound = function(){
+            round++;
+            if(round>3){
+                Game.over();
+            }else{
+                playerIndex = 0;
+                playerInfo = playerList[playerIndex];
+                Game.nextPlayer();
+            }            
+        }
+        
+        
+
+        let time;
+        function timeFuc(){
+            rspJson.respCode = '0000';
+            rspJson.respDesc = '正在计时';
+            rspJson.respAction = 'UpdateTime';
+            rspJson.resultData = {
+                time:time
+            };
+            //向同房间的用户广播
+            wss.clients.forEach((client) => {
+                if (client.userInfo.roomInfo.roomName == roomName) {
+                    client.send(JSON.stringify(rspJson));
+                }
+            });
+            time--;
+            if(time<1) {
+                playerIndex++;
+                Game.nextPlayer();
+            }else{
+                Game.timer = setTimeout(function(){
+                    timeFuc();
+                },1000);
+            }
+        }
+        Game.nextPlayer = function(){
+            if(!playerList[playerIndex]){
+                Game.nextRound();
+            }else{
+                playerInfo = playerList[playerIndex];
+                // 开始时随机获取一个关键词
+                let keyWord = ((arr) => {
+                    let num = Math.floor(Math.random()*arr.length);
+                    return arr[num]
+                })(wordArr);
+                keyWordList.set(roomName,keyWord);
+                //清除上一次的计时
+                clearTimeout(Game.timer);
+
+                rspJson.respCode = '0000';
+                rspJson.respDesc = '更换人员';
+                rspJson.respAction = 'NextPlayer';
+                rspJson.resultData = {
+                    player:playerInfo
+                };
+                
+                //向同房间的用户广播
+                wss.clients.forEach((client) => {
+                    if (client.userInfo.roomInfo.roomName == roomName) {
+                        if(client.userInfo.userName == playerInfo.userName){
+                            rspJson.resultData.keyWord = keyWord;
+                        }
+                        client.send(JSON.stringify(rspJson));
+                    }
+                });
+                //开始计时
+                time = 10;
+                Game.timer = setTimeout(function(){
+                    timeFuc();
+                },1000);
+            }
+            
+        }
+        Game.nextPlayer();
+    }
 })
