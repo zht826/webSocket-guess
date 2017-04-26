@@ -1,0 +1,19 @@
+{
+    "remotePath": "/yjdata/www/www/nhwc/",
+    "host": "115.159.78.44",
+    "username": "root",
+    "password": "19940826zht",
+    "port": 22,
+    "secure": false,
+    "protocol": "sftp",
+    "uploadOnSave": true,
+    "passive": false,
+    "debug": false,
+    "privateKeyPath": null,
+    "passphrase": null,
+    "ignore": [
+        "\\.vscode",
+        "\\.git",
+        "\\.DS_Store"
+    ]
+}

@@ -1,10 +1,21 @@
 'use strict'
 // 实例化WebSocketServer对象，监听8090端口
 const WebSocketServer = require('ws').Server
-  , wss = new WebSocketServer({port: 3456});
+  , wss = new WebSocketServer({port: 4567});
+const fs = require('fs');
 
 // 定义关键词数组
-let wordArr = ['Monkey', 'Dog', 'Bear', 'Flower', 'Girl'];
+let wordArr = new Array;
+//读取关键词数组
+fs.readFile('word.txt','utf-8', function(err,data){
+    if(err){
+        console.log(err);
+    }else{
+        wordArr = data.split("，");;
+        console.log(wordArr);
+    }
+})
+
 
 /**
  * roomlist数据格式
@@ -42,7 +53,7 @@ wss.on('connection', (ws) => {
      */
     wss.clients.forEach((client) => {
         if (client == ws) {
-            sendMessage('Connected',{},'加入成功');
+            sendMessage(client, 'Connected',{},'加入成功');
             client.send(JSON.stringify(rspJson));
         }
     });
@@ -53,8 +64,8 @@ wss.on('connection', (ws) => {
      * 根据message.reqAction的不同，响应不同的用户动作
      */
     ws.on('message', (message) => {
-        console.log('received: %s', message);//收到的消息
-        let data = JSON.parse(message);
+        console.log('received: %s', message);
+        let data = JSON.parse(message);//收到的消息
         //根据发送的消息reqAction做不同处理
         switch(data.reqAction){
             case 'Login'://打开首页时，客户端连接成功后自动发送该事件，并附带用户信息
@@ -77,7 +88,7 @@ wss.on('connection', (ws) => {
                 }
                 wss.clients.forEach((client) => {
                     if (client == ws) {//向该用户广播登陆成功
-                        sendMessage('Login',{
+                        sendMessage(client, 'Login',{
                             userInfo:userInfo,
                             roomList:roomList
                         },'登录成功');
@@ -98,7 +109,7 @@ wss.on('connection', (ws) => {
                     //房间名已存在
                     wss.clients.forEach((client) => {
                         if (client == ws) {
-                            sendMessage(data.reqAction,{},'房间名已存在','0099');
+                            sendMessage(client, data.reqAction,{},'房间名已存在','0099');
                         }
                     });
                 }else{
@@ -123,7 +134,7 @@ wss.on('connection', (ws) => {
                     });
                     //通知房间创建成功,并广播房间列表信息
                     wss.clients.forEach((client) => {
-                        sendMessage(data.reqAction,{
+                        sendMessage(client, data.reqAction,{
                             roomList:roomList,
                             ownerInfo:ws.userInfo
                         },'房间创建成功');
@@ -152,11 +163,11 @@ wss.on('connection', (ws) => {
                     //向同房间的用户广播
                     wss.clients.forEach((client) => {
                         if (client.userInfo.roomInfo.roomId == roomId) {
-                            sendMessage(data.reqAction,{
+                            sendMessage(client, data.reqAction,{
                                 userList:roomList[roomIndex].user
                             },'加入房间成功');
                             //向房间内成员广播新用户列表
-                            sendMessage("GetRoomInfo",{
+                            sendMessage(client, "GetRoomInfo",{
                                 userList:roomList[roomIndex].user
                             },'获取房间信息成功');
                         }
@@ -164,7 +175,7 @@ wss.on('connection', (ws) => {
                 }else{
                     //房间不存在
                     wss.clients.forEach((client) => {
-                        if(client == ws)sendMessage(data.reqAction,{},'房间不存在','0099');
+                        if(client == ws)sendMessage(client, data.reqAction,{},'房间不存在','0099');
                     });
                 }
                 break;
@@ -179,7 +190,7 @@ wss.on('connection', (ws) => {
                 //获取房间信息
                 wss.clients.forEach((client) => {
                     if (client == ws) {
-                        sendMessage(data.reqAction,{
+                        sendMessage(client, data.reqAction,{
                             userList:roomList[roomIndex].user
                         },'获取房间信息成功');
                     }
@@ -203,7 +214,7 @@ wss.on('connection', (ws) => {
                 };
                 wss.clients.forEach((client) => {
                     if (client.userInfo.roomInfo.roomName == roomName && client != ws) {
-                        sendMessage(data.reqAction,rspdata);
+                        sendMessage(client, data.reqAction,rspdata);
                     }
                 });
                 break;
@@ -213,7 +224,7 @@ wss.on('connection', (ws) => {
                 //房间存在
                 wss.clients.forEach((client) => {
                     if (client.userInfo.roomInfo.roomName == roomName) {
-                        sendMessage(data.reqAction,{});
+                        sendMessage(client, data.reqAction,{});
                         roomUser.push(client);
                     }
                 });
@@ -224,7 +235,7 @@ wss.on('connection', (ws) => {
                 var roomName = data.reqData.roomInfo.roomName;
                 wss.clients.forEach((client) => {
                     if (client.userInfo.roomInfo.roomName == roomName && ws != client) {
-                        sendMessage(data.reqAction,{
+                        sendMessage(client, data.reqAction,{
                             drawData:data.reqData.drawData
                         });
                     }
@@ -266,7 +277,7 @@ wss.on('connection', (ws) => {
                     //向同房间的用户广播
                     wss.clients.forEach((client) => {
                         if (client.userInfo.roomInfo.roomName == roomName) {
-                            sendMessage(data.reqAction,{
+                            sendMessage(client, data.reqAction,{
                                 userList:roomList[roomIndex].user
                             },'已离开');
                         }
@@ -275,7 +286,7 @@ wss.on('connection', (ws) => {
                 //向不在房间内的人广播房间列表
                 wss.clients.forEach((client) => {
                     if (!client.userInfo.roomInfo) {
-                        sendMessage('RoomList',{
+                        sendMessage(client, 'RoomList',{
                             roomList:roomList
                         },'更新房间信息');
                     }
@@ -323,7 +334,7 @@ wss.on('connection', (ws) => {
                 //向同房间的用户广播
                 wss.clients.forEach((client) => {
                     if (client.userInfo.roomInfo.roomName == roomName) {
-                        sendMessage(data.reqAction,{
+                        sendMessage(client, data.reqAction,{
                             userList:roomList[roomIndex].user
                         },'已离开');
                     }
@@ -332,7 +343,7 @@ wss.on('connection', (ws) => {
             //向同房间的用户广播
             wss.clients.forEach((client) => {
                 if (!client.userInfo.roomInfo) {
-                    sendMessage('RoomList',{
+                    sendMessage(client, 'RoomList',{
                         roomList:roomList
                     },'更新房间信息');
                 }
@@ -360,30 +371,29 @@ wss.on('connection', (ws) => {
             //根据发送的消息类型做不同处理
             switch(data.reqAction){
                 case 'Answer':
-                    rspJson.respAction = 'Answer';
                     var roomName = data.reqData.roomInfo.roomName;
                     let result;
-
                     data.reqData.answer == keyWordList.get(roomName) ? result = true: result = false;
-
                     console.log('答案:'+result);
-
-                    rspJson.resultData= {};
                     if(result){
                         playerList[playerIndex].soccer++;
+
+                        //回答正确进入下一局
+                        playerIndex++;
+                        Game.nextPlayer();
                     }
                     //房间存在
-                    rspJson.respCode = '0000';
-                    rspJson.respDesc = '成功';
-                    rspJson.respAction = data.reqAction;
-                    rspJson.resultData.result = result;
                     wss.clients.forEach((client) => {
                         if (client.userInfo.roomInfo.roomName == roomName && ws == client) {
                             if(ws == client){
-                                rspJson.resultData.userInfo = playerList;
-                                client.send(JSON.stringify(rspJson));
+                                sendMessage(client, data.reqAction,{
+                                    result:result,
+                                    userInfo:playerList
+                                },'回答结果');
                             }else{
-                                client.send(JSON.stringify(rspJson));
+                                sendMessage(client, data.reqAction,{
+                                    userInfo:playerList
+                                },'回答结果');
                             }
                         }
                     });
@@ -392,18 +402,15 @@ wss.on('connection', (ws) => {
                     break;
             }
         })
+        
         Game.over = function(){
             clearTimeout(Game.timer);
-            rspJson.respCode = '0000';
-            rspJson.respDesc = '游戏结束';
-            rspJson.respAction = 'GameOver';
-            rspJson.resultData = {
-                player:playerInfo
-            };
             //向同房间的用户广播
             wss.clients.forEach((client) => {
                 if (client.userInfo.roomInfo.roomName == roomName) {
-                    client.send(JSON.stringify(rspJson));
+                    sendMessage(client, 'GameOver',{
+                        player:playerInfo
+                    },'游戏结束');
                 }
             });
         }
@@ -419,20 +426,14 @@ wss.on('connection', (ws) => {
             }            
         }
         
-        
-
         let time;
         function timeFuc(){
-            rspJson.respCode = '0000';
-            rspJson.respDesc = '正在计时';
-            rspJson.respAction = 'UpdateTime';
-            rspJson.resultData = {
-                time:time
-            };
             //向同房间的用户广播
             wss.clients.forEach((client) => {
                 if (client.userInfo.roomInfo.roomName == roomName) {
-                    client.send(JSON.stringify(rspJson));
+                    sendMessage(client, 'UpdateTime',{
+                        time:time
+                    },'正在计时');
                 }
             });
             time--;
@@ -459,24 +460,20 @@ wss.on('connection', (ws) => {
                 //清除上一次的计时
                 clearTimeout(Game.timer);
 
-                rspJson.respCode = '0000';
-                rspJson.respDesc = '更换人员';
-                rspJson.respAction = 'NextPlayer';
-                rspJson.resultData = {
+                let tempData = {
                     player:playerInfo
                 };
-                
                 //向同房间的用户广播
                 wss.clients.forEach((client) => {
                     if (client.userInfo.roomInfo.roomName == roomName) {
                         if(client.userInfo.userName == playerInfo.userName){
-                            rspJson.resultData.keyWord = keyWord;
+                            tempData.keyWord = keyWord;
                         }
-                        client.send(JSON.stringify(rspJson));
+                        sendMessage(client, 'NextPlayer',tempData,'更换人员');
                     }
                 });
                 //开始计时
-                time = 10;
+                time = 45;
                 Game.timer = setTimeout(function(){
                     timeFuc();
                 },1000);
@@ -486,7 +483,7 @@ wss.on('connection', (ws) => {
         Game.nextPlayer();
     }
 })
-function sendMessage(action, data, desc, code ){
+function sendMessage(client, action, data, desc, code ){
     let rspJson = {
         respCode:'0000',
         respAction:'Default',
