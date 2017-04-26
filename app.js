@@ -375,12 +375,15 @@ wss.on('connection', (ws) => {
                     let result;
                     data.reqData.answer == keyWordList.get(roomName) ? result = true: result = false;
                     console.log('答案:'+result);
+                    let tempUser;
                     if(result){
                         playerList[playerIndex].soccer++;
-
+                        tempUser = playerList[playerIndex];
                         //回答正确进入下一局
                         playerIndex++;
                         Game.nextPlayer();
+                    }else{
+                        tempUser = playerList[playerIndex];
                     }
                     //房间存在
                     wss.clients.forEach((client) => {
@@ -388,11 +391,14 @@ wss.on('connection', (ws) => {
                             if(ws == client){
                                 sendMessage(client, data.reqAction,{
                                     result:result,
-                                    userInfo:playerList
+                                    userInfo:tempUser,
+                                    isMe:true
                                 },'回答结果');
                             }else{
                                 sendMessage(client, data.reqAction,{
-                                    userInfo:playerList
+                                    result:result,
+                                    userInfo:tempUser,
+                                    isMe:false
                                 },'回答结果');
                             }
                         }
@@ -480,7 +486,10 @@ wss.on('connection', (ws) => {
             }
             
         }
-        Game.nextPlayer();
+        setTimeout(function(){
+            Game.nextPlayer();
+        },3000);
+        
     }
 })
 function sendMessage(client, action, data, desc, code ){
