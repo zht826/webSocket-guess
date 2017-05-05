@@ -443,7 +443,7 @@ wss.on('connection', (ws) => {
                 }
             });
             time--;
-            if(time<1) {
+            if(time<0) {
                 playerIndex++;
                 Game.nextPlayer();
             }else{
@@ -488,7 +488,7 @@ wss.on('connection', (ws) => {
         }
         setTimeout(function(){
             Game.nextPlayer();
-        },3000);
+        },2000);
         
     }
 })
